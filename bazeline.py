@@ -48,10 +48,14 @@ def process_image(user_image_bytes: BytesIO) -> BytesIO:
     offset_x = INNER_MARGIN_X + (inner_w - s_w) // 2
     offset_y = INNER_MARGIN_Y + (inner_h - s_h) // 2
 
-    mask = Image.new("L", (s_w, s_h), 0)
-    draw = ImageDraw.Draw(mask)
-    draw.rounded_rectangle((0, 0, s_w, s_h), radius=CORNER_RADIUS, fill=255)
-
+    # Антиалиасинг углов: рисуем маску в большем разрешении и сжимаем
+    AA = 4
+    hi_mask = Image.new("L", (s_w * AA, s_h * AA), 0)
+    hi_draw = ImageDraw.Draw(hi_mask)
+    hi_draw.rounded_rectangle(
+        (0, 0, s_w * AA, s_h * AA), radius=CORNER_RADIUS * AA, fill=255
+    )
+    mask = hi_mask.resize((s_w, s_h), Image.LANCZOS)
     rounded = Image.new("RGBA", (s_w, s_h), (0, 0, 0, 0))
     rounded.paste(src, (0, 0), mask=mask)
 
@@ -60,14 +64,21 @@ def process_image(user_image_bytes: BytesIO) -> BytesIO:
     shadow_w = s_w + shadow_pad
     shadow_h = s_h + shadow_pad
 
-    shadow_mask = Image.new("L", (shadow_w, shadow_h), 0)
-    shadow_draw = ImageDraw.Draw(shadow_mask)
-    shadow_draw.rounded_rectangle(
-        (SHADOW_BLUR, SHADOW_BLUR, SHADOW_BLUR + s_w, SHADOW_BLUR + s_h),
-        radius=CORNER_RADIUS,
+    hi_shadow_mask = Image.new("L", (shadow_w * AA, shadow_h * AA), 0)
+    hi_shadow_draw = ImageDraw.Draw(hi_shadow_mask)
+    hi_shadow_draw.rounded_rectangle(
+        (
+            SHADOW_BLUR * AA,
+            SHADOW_BLUR * AA,
+            SHADOW_BLUR * AA + s_w * AA,
+            SHADOW_BLUR * AA + s_h * AA,
+        ),
+        radius=CORNER_RADIUS * AA,
         fill=255,
     )
-    shadow_mask = shadow_mask.filter(ImageFilter.GaussianBlur(SHADOW_BLUR))
+    
+    hi_shadow_mask = hi_shadow_mask.filter(ImageFilter.GaussianBlur(SHADOW_BLUR * AA))
+    shadow_mask = hi_shadow_mask.resize((shadow_w, shadow_h), Image.LANCZOS)
 
     shadow = Image.new("RGBA", (shadow_w, shadow_h), (0, 0, 0, 0))
     shadow.paste((0, 0, 0, SHADOW_ALPHA), mask=shadow_mask)
